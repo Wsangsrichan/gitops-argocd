@@ -1,0 +1,62 @@
+# kube-prometheus-stack values for kind (dev) cluster
+# Minimal config — no persistent storage, no AlertManager, Grafana ingress enabled
+
+# Default values from: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+
+# Disable AlertManager (not needed for dev)
+alertmanager:
+  enabled: false
+
+# Grafana configuration
+grafana:
+  # Set admin password
+  adminPassword: admin
+
+  # Disable persistent storage (kind doesn't need it)
+  persistence:
+    enabled: false
+
+  # Enable ingress for Grafana
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.local
+    # No TLS for dev; use plain HTTP
+    tls: []
+
+  # Additional datasources and dashboard providers are auto-configured
+  # Prometheus datasource is auto-provisioned by the chart
+
+# Prometheus configuration
+prometheus:
+  # Disable persistent storage
+  prometheusSpec:
+    storageSpec: {}
+    # Keep 2h retention for dev
+    retention: 2h
+    # No persistent volume claim
+    retentionSize: ""
+
+  ingress:
+    enabled: false
+
+# Core components we want to keep
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+# kubelet metrics
+kubelet:
+  enabled: true
+
+# Default rules and dashboards
+defaultRules:
+  create: true
+
+# No PSP in k8s 1.30+
+global:
+  rbac:
+    create: true
