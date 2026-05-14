@@ -8,6 +8,19 @@
 Production GitOps deployment of ArgoCD HA on a 6-node DigitalOcean Kubernetes cluster.
 All workloads sync automatically from this GitHub repo via the App of Apps pattern.
 
+## Table of Contents
+
+- [Quick Access](#quick-access)
+- [Architecture](#architecture)
+- [Directory Structure](#directory-structure)
+- [Deployment](#deployment)
+- [Getting Started (from scratch)](#getting-started-from-scratch)
+- [Troubleshooting](#troubleshooting)
+- [Known Issues](#known-issues)
+- [Sync Policy](#sync-policy)
+- [Phase History](#phase-history)
+- [Uninstall](#uninstall)
+
 ## Quick Access
 
 | Service | URL | Auth |
@@ -152,6 +165,156 @@ kubectl get pods -n argocd
 | Prometheus | standalone | Helm chart, `monitoring` namespace |
 | Grafana | Helm | `monitoring` namespace, admin/admin |
 | ResourceQuotas | — | Applied to `guestbook` + `nginx-demo` namespaces |
+
+## Getting Started (from scratch)
+
+Step-by-step guide for deploying on any Kubernetes cluster. Adapt the DNS workaround if needed.
+
+### 0. Verify Prerequisites
+
+```bash
+kubectl cluster-info
+kubectl get nodes
+argocd version --client
+```
+
+### 1. Install ArgoCD
+
+```bash
+# Option A: One-command
+chmod +x bootstrap/install.sh
+./bootstrap/install.sh
+
+# Option B: Manual
+kubectl create namespace argocd
+kubectl apply -n argocd -f bootstrap/install.yaml
+kubectl get pods -n argocd -w
+```
+
+### 2. Access Dashboard
+
+```bash
+# Get admin password
+kubectl get secret argocd-initial-admin-secret \
+  -n argocd -o jsonpath="{.data.password}" | base64 -d && echo
+
+# With Ingress (production):
+open https://argocd.ipptt.com
+
+# Without Ingress (dev):
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+open https://localhost:8080
+```
+
+Login: `admin` / *(output above)* — browser will show self-signed cert warning on first access.
+
+### 3. Login via CLI
+
+```bash
+PASSWORD=$(kubectl get secret argocd-initial-admin-secret \
+  -n argocd -o jsonpath="{.data.password}" | base64 -d)
+
+argocd login argocd.ipptt.com --username admin --password "${PASSWORD}" --insecure --grpc-web
+```
+
+### 4. Connect Repo
+
+Public repo — no PAT needed:
+
+```bash
+argocd repo add https://github.com/Wsangsrichan/gitops-argocd.git --type git
+```
+
+For private repos, use SealedSecrets or `argocd repo add` with credentials.
+
+### 5. Create AppProject
+
+```bash
+kubectl apply -f projects/demo-project.yaml
+argocd proj list
+```
+
+### 6. Deploy Demo Apps
+
+```bash
+# App of Apps (recommended)
+kubectl apply -f argocd/root-app.yaml
+
+# Or individual apps
+kubectl apply -f apps/guestbook/Application.yaml
+kubectl apply -f apps/nginx-demo/Application.yaml
+```
+
+### 7. Check Status
+
+```bash
+argocd app list
+argocd app get guestbook
+argocd app get nginx-demo
+```
+
+Expected: `OutOfSync` / `Missing` — normal before first sync.
+
+### 8. Sync Applications
+
+```bash
+# Sync all
+argocd app sync root-app --cascade
+
+# Or individual
+argocd app sync guestbook
+argocd app sync nginx-demo
+```
+
+Auto-sync (prune + selfHeal) is enabled by default — apps will sync automatically on every push.
+
+### 9. Verify Workloads
+
+```bash
+kubectl get pods -n guestbook
+kubectl get pods -n nginx-demo
+
+# With Ingress:
+curl -H "Host: guestbook.ipptt.com" http://<ingress-ip>/
+curl -H "Host: nginx.ipptt.com" http://<ingress-ip>/
+
+# Without Ingress:
+kubectl port-forward svc/guestbook -n guestbook 8081:80
+kubectl port-forward svc/nginx-demo -n nginx-demo 8082:80
+```
+
+## Troubleshooting
+
+### Pods stuck in Pending/ContainerCreating
+
+```bash
+kubectl describe pod <pod-name> -n argocd
+# Common causes: insufficient resources, image pull issues, PVC problems
+```
+
+### Repo connection fails
+
+```bash
+kubectl run tmp --image=curlimages/curl --rm -it --restart=Never -- \
+  curl -s -o /dev/null -w "%{http_code}" https://github.com/Wsangsrichan/gitops-argocd.git
+
+argocd repo add https://github.com/Wsangsrichan/gitops-argocd.git --type git --upsert
+```
+
+### Application stuck OutOfSync
+
+```bash
+argocd app diff <app-name>
+argocd app get <app-name> --hard-refresh
+kubectl get all -n <target-namespace>
+```
+
+### Reset admin password
+
+```bash
+kubectl -n argocd patch secret argocd-secret \
+  -p '{"stringData": {"admin.password": "'"$(htpasswd -nbBC 10 admin NEW_PASSWORD | tr -d ':\n' | sed 's/$2y/$2a/')"'"}}'
+```
 
 ## Known Issues
 
