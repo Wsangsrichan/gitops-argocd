@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: guestbook-quota
+  namespace: guestbook
+spec:
+  hard:
+    # Compute resource limits
+    requests.cpu: "100m"
+    requests.memory: "128Mi"
+    limits.cpu: "500m"
+    limits.memory: "512Mi"
+    # Object count limits
+    count/pods: "10"
