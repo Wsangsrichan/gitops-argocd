@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: demo-project
+  namespace: argocd
+spec:
+  description: "Demo project for learning ArgoCD GitOps"
+  sourceRepos:
+    - "https://gitlab.example.com/team/gitops-argocd.git"
+  destinations:
+    - namespace: "guestbook"
+      server: "https://kubernetes.default.svc"
+    - namespace: "nginx-demo"
+      server: "https://kubernetes.default.svc"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: "Namespace"
+  namespaceResourceBlacklist: []
+  roles: []
