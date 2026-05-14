@@ -45,6 +45,12 @@ gitops-argocd/
 ├── apps/                       # Application definitions
 │   ├── guestbook/              # Helm-based demo app
 │   └── nginx-demo/             # Kustomize-based demo app
+├── infra/                      # Shared infrastructure (Ingress, etc.)
+│   ├── README.md               # Infra docs + access guide
+│   └── ingress/                # NGINX Ingress rules
+│       ├── argocd.yaml         # argocd.local → ArgoCD UI
+│       ├── guestbook.yaml      # guestbook.local → Guestbook
+│       └── nginx-demo.yaml     # nginx.local → Nginx Demo
 └── argocd/                     # App of Apps (root)
     └── root-app.yaml           # Parent Application pointing to apps/
 ```
@@ -59,6 +65,7 @@ gitops-argocd/
 | Sync policy | Auto (prune + selfHeal) ✅ | Automated sync enabled on all apps; Phase 2b complete |
 | Source control | GitLab | User requirement |
 | Demo apps | Guestbook (Helm) + Nginx (Kustomize) | Show both Helm and Kustomize patterns |
+| Dashboard access | NGINX Ingress (argocd.local) ✅ | Dev access via local DNS — no port-forward needed; Phase 3a complete |
 
 ## Quick Reference
 
@@ -84,8 +91,9 @@ argocd app get <app-name>
 
 ## Verification Checklist
 - [ ] ArgoCD pods running in `argocd` namespace
-- [ ] ArgoCD API server accessible (port-forward or Ingress)
+- [ ] ArgoCD API server accessible via Ingress (http://argocd.local)
 - [ ] GitLab repo connected (status: Successful in Repositories)
 - [ ] AppProject created (no errors)
 - [ ] Application syncs successfully
-- [ ] Guestbook accessible via port-forward
+- [ ] Guestbook accessible via Ingress (http://guestbook.local)
+- [ ] Nginx Demo accessible via Ingress (http://nginx.local)
