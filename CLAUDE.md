@@ -40,6 +40,8 @@ gitops-argocd/
 │   └── install.yaml            # ArgoCD core install manifest
 ├── projects/                   # AppProject definitions
 │   └── demo-project.yaml       # Example: RBAC-bounded project
+├── sealed-secrets/             # SealedSecret manifests
+│   └── github-token.yaml       # GitHub PAT (encrypted by kubeseal)
 ├── apps/                       # Application definitions
 │   ├── guestbook/              # Helm-based demo app
 │   └── nginx-demo/             # Kustomize-based demo app
@@ -53,8 +55,8 @@ gitops-argocd/
 |----------|--------|-----------|
 | ArgoCD version | v2.14 | Stable on k8s 1.30, tested |
 | Install mode | Core (non-HA) | Phase 1 — single cluster, no HA needed |
-| Secret management | kubectl manual (Phase 1) → SealedSecrets (Phase 2) | GitOps-native secrets require sealing; start simple |
-| Sync policy | Manual (Phase 1) → Auto (Phase 2) | Safety first — manual sync with prune disabled |
+| Secret management | SealedSecrets ✅ | GitOps-native secrets via kubeseal; Phase 2b complete |
+| Sync policy | Auto (prune + selfHeal) ✅ | Automated sync enabled on all apps; Phase 2b complete |
 | Source control | GitLab | User requirement |
 | Demo apps | Guestbook (Helm) + Nginx (Kustomize) | Show both Helm and Kustomize patterns |
 

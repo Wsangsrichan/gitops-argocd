@@ -15,5 +15,8 @@ spec:
     server: https://kubernetes.default.svc
     namespace: nginx-demo
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
