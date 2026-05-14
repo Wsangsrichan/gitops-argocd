@@ -47,10 +47,12 @@ gitops-argocd/
 │   └── nginx-demo/             # Kustomize-based demo app
 ├── infra/                      # Shared infrastructure (Ingress, etc.)
 │   ├── README.md               # Infra docs + access guide
-│   └── ingress/                # NGINX Ingress rules
-│       ├── argocd.yaml         # argocd.local → ArgoCD UI
-│       ├── guestbook.yaml      # guestbook.local → Guestbook
-│       └── nginx-demo.yaml     # nginx.local → Nginx Demo
+│   ├── ingress/                # NGINX Ingress rules
+│   │   ├── argocd.yaml         # argocd.local → ArgoCD UI
+│   │   ├── guestbook.yaml      # guestbook.local → Guestbook
+│   │   └── nginx-demo.yaml     # nginx.local → Nginx Demo
+│   ├── monitoring/             # Prometheus + Grafana stack
+│   └── quotas/                 # ResourceQuota enforcement
 └── argocd/                     # App of Apps (root)
     └── root-app.yaml           # Parent Application pointing to apps/
 ```
@@ -65,7 +67,8 @@ gitops-argocd/
 | Sync policy | Auto (prune + selfHeal) ✅ | Automated sync enabled on all apps; Phase 2b complete |
 | Source control | GitLab | User requirement |
 | Demo apps | Guestbook (Helm) + Nginx (Kustomize) | Show both Helm and Kustomize patterns |
-| Dashboard access | NGINX Ingress (argocd.local) ✅ | Dev access via local DNS — no port-forward needed; Phase 3a complete |
+| Dashboard access | Ingress (argocd.local) ✅ | Dev access via local DNS — no port-forward needed; Phase 3 complete |
+| Monitoring | Prometheus + Grafana ✅ | Prometheus scraping ArgoCD metrics; Grafana dashboard 14584; Phase 3 complete |
 
 ## Quick Reference
 
@@ -90,10 +93,23 @@ argocd app get <app-name>
 - Secret type: `argocd.argoproj.io/secret-type: repo-creds`
 
 ## Verification Checklist
-- [ ] ArgoCD pods running in `argocd` namespace
-- [ ] ArgoCD API server accessible via Ingress (http://argocd.local)
-- [ ] GitLab repo connected (status: Successful in Repositories)
-- [ ] AppProject created (no errors)
-- [ ] Application syncs successfully
-- [ ] Guestbook accessible via Ingress (http://guestbook.local)
-- [ ] Nginx Demo accessible via Ingress (http://nginx.local)
+- [x] ArgoCD pods running in `argocd` namespace
+- [x] Dashboard accessible via https://argocd.local
+- [x] GitHub repo connected (status: Successful in Repositories)
+- [x] AppProject created (no errors)
+- [x] Applications sync (Auto-Prune)
+- [x] Guestbook accessible via https://guestbook.local
+- [x] NGINX Ingress working
+- [x] SealedSecrets controller running
+- [x] Prometheus scraping ArgoCD metrics
+- [x] Grafana dashboard imported (ID 14584)
+- [x] ResourceQuotas enforced
+
+## Phase Summary
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Bootstrap — ArgoCD core install, namespace, root app | ✅ Complete |
+| Phase 2 | AppProjects + Applications (Guestbook, Nginx Demo) | ✅ Complete |
+| Phase 2b | SealedSecrets, Auto-Sync, GitHub PAT | ✅ Complete |
+| Phase 3 | Ingress (argocd.local, guestbook.local), Monitoring (Prometheus + Grafana), ResourceQuotas | ✅ Complete |
