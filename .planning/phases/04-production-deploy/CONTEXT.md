@@ -21,7 +21,7 @@ Phase 1-3 were deployed on a local single-node kind cluster with kind-specific w
 | Aspect | Kind (Phase 1-3) | Production (Phase 4) |
 |--------|-------------------|----------------------|
 | Nodes | 1 node | 6 nodes (3CP + 3W) |
-| ArgoCD Mode | Core | Core (pinned to controlplan-0 via nodeSelector) |
+| ArgoCD Mode | Core | HA (pinned to controlplan-0, replicas=1) |
 | Storage | No StorageClass | local-path (Rancher provisioner) |
 | Ingress Access | NodePort + /etc/hosts | NGINX Ingress + ipptt.com |
 | Domains | *.local | *.ipptt.com |
@@ -57,10 +57,25 @@ The initial install used v2.14.0-rc7 (from repo's old `bootstrap/install.yaml`) 
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| ArgoCD version | v2.14 stable (not rc7) | rc7 crashes on DNS race condition |
-| Install mode | Core (non-HA) | HA Redis has known init-container issues on k8s v1.32 |
+| ArgoCD version | v2.14 stable (HA mode) | rc7 crashes on DNS race condition; HA for failover readiness |
 | Ingress domain | *.ipptt.com | User's domain for production access |
 | Grafana password | admin/admin | Dev/demo convenience |
 | StorageClass | local-path | No cloud CSI available, bare-metal nodes |
 | NGINX Ingress type | NodePort (32431/30364) | No cloud LoadBalancer available |
 | Prometheus chart | Standalone prometheus-community/prometheus | Simpler than kube-prometheus-stack Operator |
+
+## ArgoCD HA Deployment (2026-05-14)
+
+Successfully deployed ArgoCD v2.14 in HA mode. Key components:
+- **Redis HA**: StatefulSet with 3 containers (redis, sentinel, split-brain-fix) + HAProxy for sentinel discovery
+- **Pod Anti-Affinity**: HA components use `podAntiAffinity` to spread across nodes — incompatible with DNS workaround
+- **Replicas**: All scaled to 1 pending inter-node DNS fix
+
+### HA Failover Architecture
+```
+argocd-server → argocd-redis-ha-haproxy:26379 (sentinel) → argocd-redis-ha-server-*:6379 (redis)
+```
+When DNS is fixed and replicas are scaled:
+- 3 Redis servers: 1 master + 2 replicas (auto-failover via sentinel)
+- 3 HAProxy instances: discover master via sentinel, route traffic
+- 2 Repo servers + 2 API servers: for redundancy

@@ -57,44 +57,69 @@ kubectl patch statefulset -n argocd argocd-application-controller --type=strateg
 
 ---
 
-## Part 4b — ArgoCD Installation
+## Part 4b — ArgoCD HA Installation
 
-### Task 4b-1 — Install ArgoCD (Stable v2.14)
+### Task 4b-1 — Clean Previous ArgoCD
+```bash
+kubectl delete namespace argocd --wait=true --timeout=120s
+```
+
+### Task 4b-2 — Install ArgoCD HA
 ```bash
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.14.0/manifests/ha/install.yaml
 ```
-**Note**: Used stable upstream — not repo's `bootstrap/install.yaml` (which had v2.14.0-rc7 with DNS crash bug).
 
-### Task 4b-2 — Get Admin Password
+HA components: application-controller (StatefulSet), redis-ha-server (StatefulSet, 3 containers: redis+sentinel+split-brain-fix), redis-ha-haproxy (Deployment), plus standard components (dex, notifications, repo-server, server).
+
+### Task 4b-3 — Scale to 1 Replica (DNS Workaround)
+Pod anti-affinity prevents multiple replicas on same node. Since all pods must run on controlplan-0 (DNS workaround), scale down:
+```bash
+kubectl scale deployment -n argocd argocd-redis-ha-haproxy --replicas=1
+kubectl scale statefulset -n argocd argocd-redis-ha-server --replicas=1
+kubectl scale deployment -n argocd argocd-repo-server --replicas=1
+kubectl scale deployment -n argocd argocd-server --replicas=1
+```
+
+### Task 4b-4 — Handle Stale ReplicaSets
+HA manifest creates new ReplicaSets; old non-HA RS may still exist. Scale old ones to 0:
+```bash
+kubectl get rs -n argocd | grep '0.*0.*0' | awk '{print $1}' | while read rs; do
+  kubectl scale rs -n argocd $rs --replicas=0
+done
+```
+
+### Task 4b-5 — CRD Finalizer Issue
+Previous CRD deletion may leave stuck `customresourcecleanup` finalizer. Fix:
+```bash
+kubectl patch crd applications.argoproj.io --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.14.0/manifests/ha/install.yaml
+```
+
+### Task 4b-6 — Get Admin Password + Create Ingress
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+kubectl apply -f infra/ingress/argocd.yaml
 ```
 
-### Task 4b-3 — Create Ingress for ArgoCD
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: argocd-server
-  namespace: argocd
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: argocd.ipptt.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: argocd-server
-            port:
-              number: 443
+**Verification**: 8 pods all 1/1 Running on controlplan-0, ingress returns 200.
+
+### HA vs Non-HA Comparison
+| Component | Non-HA | HA |
+|-----------|--------|-----|
+| Redis | Single `argocd-redis` pod | `argocd-redis-ha-server` StatefulSet (redis+sentinel) + `argocd-redis-ha-haproxy` Deployment |
+| Failover | None | Sentinel-based automatic failover |
+| Replicas (current) | 1 | 1 (limited by DNS workaround) |
+| Replicas (target) | 1 | haproxy=3, redis=3, repo-server=2, server=2 |
+
+### HA Failover Architecture
 ```
+argocd-server → argocd-redis-ha-haproxy:26379 (sentinel) → argocd-redis-ha-server-*:6379 (redis)
+```
+When DNS fixed and replicas scaled:
+- 3 Redis servers: 1 master + 2 replicas (auto-failover via sentinel)
+- 3 HAProxy instances: discover master via sentinel, route traffic
+- 2 Repo servers + 2 API servers: for redundancy
 
 ---
 
@@ -207,7 +232,7 @@ kubectl apply -f resource-quotas/nginx-demo-quota.yaml
 ### Cluster Snapshot
 ```
 6 nodes: 3 CP + 3 W (all Ready)
-argocd:      7 pods (controlplan-0)
+argocd:      ArgoCD HA (8 pods on controlplan-0)
 guestbook:   1 pod
 nginx-demo:  2 pods
 monitoring: 12 pods (Prometheus + Grafana)
@@ -217,5 +242,5 @@ kube-system: SealedSecrets + CoreDNS (1 replica)
 
 ### Known Issues
 - **DNS blocked between nodes**: Workaround — CoreDNS=1 + ArgoCD pinned to CP0. Fix: open port 53 on DO firewall.
-- **No HA**: ArgoCD single point of failure on controlplan-0. Fix after DNS resolved.
+- **HA scaled to 1**: ArgoCD HA deployed but all replicas=1 due to DNS workaround. Scale up after DNS resolved.
 - **Grafana datasource**: Manual Prometheus connection needed (`http://prometheus-server.monitoring.svc.cluster.local`).

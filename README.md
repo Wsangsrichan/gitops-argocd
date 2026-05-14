@@ -1,10 +1,10 @@
 # gitops-argocd
 
 ![GitOps](https://img.shields.io/badge/GitOps-ArgoCD-blue?logo=argo)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.30-blue?logo=kubernetes)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.32.1-blue?logo=kubernetes)
 ![ArgoCD](https://img.shields.io/badge/ArgoCD-v2.14-orange)
 
-GitOps repository for ArgoCD on Kubernetes v1.30. Contains bootstrap manifests,
+GitOps repository for ArgoCD on Kubernetes v1.32.1. Contains bootstrap manifests,
 AppProjects, and Application definitions managed by ArgoCD.
 
 ## Table of Contents
@@ -20,7 +20,9 @@ AppProjects, and Application definitions managed by ArgoCD.
 - [Step 7 — Check Status](#step-7--check-status)
 - [Step 8 — Sync Applications](#step-8--sync-applications)
 - [Step 9 — Verify Workloads](#step-9--verify-workloads)
+- [Phase 4 — HA Ingress & DNS](#phase-4--ha-ingress--dns)
 - [Troubleshooting](#troubleshooting)
+- [Known Issues](#known-issues)
 - [Uninstall](#uninstall)
 - [Directory Structure](#directory-structure)
 
@@ -29,7 +31,7 @@ AppProjects, and Application definitions managed by ArgoCD.
 | Tool | Purpose | Install |
 |------|---------|---------|
 | `kubectl` | Cluster management | [kubernetes.io/docs/tasks/tools](https://kubernetes.io/docs/tasks/tools/) |
-| Kubernetes v1.30+ | Target cluster | GKE, EKS, kubeadm, minikube, k3s |
+| Kubernetes v1.32+ | Target cluster | DigitalOcean (3 CP + 3 W), k3s |
 | `argocd` CLI | App management | [argoproj.github.io/argo-cd/cli_installation](https://argo-cd.readthedocs.io/en/stable/cli_installation/) |
 | GitLab PAT | Repo authentication | GitLab → Settings → Access Tokens |
 
@@ -236,6 +238,22 @@ kubectl port-forward svc/nginx-demo -n nginx-demo 8082:80
 
 ArgoCD dashboard should show all apps `Synced` and `Healthy`.
 
+## Phase 4 — HA Ingress & DNS
+
+Production deployment on DigitalOcean 6-node cluster with `*.ipptt.com` ingress.
+
+| Service | URL | Auth |
+|---------|-----|------|
+| ArgoCD (HA) | https://argocd.ipptt.com | admin |
+| Guestbook | https://guestbook.ipptt.com | — |
+| Nginx Demo | https://nginx.ipptt.com | — |
+| Grafana | https://grafana.ipptt.com | admin/admin |
+
+**ArgoCD HA Mode** — 8 pods, Redis HA (sentinel-based failover):
+```
+argocd-server → argocd-redis-ha-haproxy:26379 → argocd-redis-ha-server:6379
+```
+
 ## Troubleshooting
 
 ### Pods stuck in Pending/ContainerCreating
@@ -289,6 +307,14 @@ kubectl -n argocd patch secret argocd-secret \
 argocd account update-password --account admin --current-password <current> --new-password <new>
 ```
 
+## Known Issues
+
+| Issue | Workaround | Fix |
+|-------|-----------|-----|
+| Inter-node DNS blocked (port 53) | CoreDNS=1 + ArgoCD pinned to controlplan-0 | Open UDP/TCP 53 on DO firewall |
+| HA replicas scaled to 1 | Pod anti-affinity + single-node limit | Scale after DNS fix |
+| Grafana datasource manual | Connect Prometheus at `http://prometheus-server.monitoring.svc.cluster.local` | Provision via ConfigMap |
+
 ## Uninstall
 
 ```bash
@@ -327,13 +353,34 @@ gitops-argocd/
 │   └── nginx-demo/          # Kustomize-based demo
 │       ├── base/
 │       └── Application.yaml
+│   ├── ingress/                # NGINX Ingress rules (*.ipptt.com)
+│   │   ├── argocd.yaml         # argocd.ipptt.com → ArgoCD UI
+│   │   ├── guestbook.yaml      # guestbook.ipptt.com → Guestbook
+│   │   ├── nginx-demo.yaml     # nginx.ipptt.com → Nginx Demo
+│   │   └── grafana.yaml        # grafana.ipptt.com → Grafana
+│   ├── monitoring/             # Prometheus + Grafana stack
+│   └── quotas/                 # ResourceQuota enforcement
+├── .planning/                  # GSD planning documents
+│   └── phases/
+│       ├── 02-deploy/
+│       ├── 03-ingress-monitoring/
+│       └── 04-production-deploy/
 └── argocd/
-    └── root-app.yaml        # App of Apps parent
+    └── root-app.yaml           # App of Apps (HA ArgoCD, Auto-Sync)
 ```
 
 ## Sync Policy
 
-Phase 1 uses **manual sync** for safety. No automated sync or prune.
+ArgoCD HA (v2.14) with **auto-sync enabled** — `automated.prune: true`, `automated.selfHeal: true`. Apps sync automatically from GitHub on every push.
+
+## Phase History
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Bootstrap ArgoCD core | ✅ |
+| Phase 2 | AppProjects + demo apps | ✅ |
+| Phase 2b | SealedSecrets + Auto-Sync | ✅ |
+| Phase 3 | Ingress + Monitoring + Quotas | ✅ |
+| Phase 4 | HA redeploy (6-node DO, ipptt.com, Redis HA) | ✅ |
 
 ## License
 
