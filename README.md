@@ -118,7 +118,7 @@ argocd account list
 ### Option A: Via argocd CLI
 
 ```bash
-argocd repo add https://gitlab.example.com/team/gitops-argocd.git \
+argocd repo add https://github.com/Wsangsrichan/gitops-argocd.git \
   --username <gitlab-username> \
   --password <gitlab-pat>
 ```
@@ -135,7 +135,7 @@ metadata:
   labels:
     argocd.argoproj.io/secret-type: repo-creds
 stringData:
-  url: https://gitlab.example.com
+  url: https://github.com
   username: <gitlab-username>
   password: <gitlab-pat>
 EOF
@@ -255,13 +255,13 @@ kubectl describe pod <pod-name> -n argocd
 ```bash
 # Test connectivity from cluster
 kubectl run tmp --image=curlimages/curl --rm -it --restart=Never -- \
-  curl -s -o /dev/null -w "%{http_code}" https://gitlab.example.com/team/gitops-argocd.git
+  curl -s -o /dev/null -w "%{http_code}" https://github.com/Wsangsrichan/gitops-argocd.git
 
 # Verify secret exists
 kubectl get secret gitlab-repo-creds -n argocd -o yaml
 
 # Re-add repo with correct PAT
-argocd repo add https://gitlab.example.com/team/gitops-argocd.git \
+argocd repo add https://github.com/Wsangsrichan/gitops-argocd.git \
   --username <user> --password <pat> --upsert
 ```
 

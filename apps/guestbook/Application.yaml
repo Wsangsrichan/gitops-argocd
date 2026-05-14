@@ -8,7 +8,7 @@ metadata:
 spec:
   project: demo-project
   source:
-    repoURL: https://gitlab.example.com/team/gitops-argocd.git
+    repoURL: https://github.com/Wsangsrichan/gitops-argocd.git
     targetRevision: main
     path: apps/guestbook
     helm:

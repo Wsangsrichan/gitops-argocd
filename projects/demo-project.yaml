@@ -6,7 +6,7 @@ metadata:
 spec:
   description: "Demo project for learning ArgoCD GitOps"
   sourceRepos:
-    - "https://gitlab.example.com/team/gitops-argocd.git"
+    - "https://github.com/Wsangsrichan/gitops-argocd.git"
   destinations:
     - namespace: "guestbook"
       server: "https://kubernetes.default.svc"
