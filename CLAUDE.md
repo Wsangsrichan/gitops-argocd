@@ -1,11 +1,12 @@
-# gitops-argocd — ArgoCD GitOps on Kubernetes v1.30
+# gitops-argocd — ArgoCD GitOps on Production Kubernetes
 
 ## Identity
 **Project:** gitops-argocd
 **Purpose:** GitOps repository for ArgoCD — bootstrap, AppProjects, and Application manifests
 **Owner:** Haocomm
-**Stack:** ArgoCD v2.14, Kubernetes v1.30, GitLab (source control), YAML/Kustomize/Helm
+**Stack:** ArgoCD v2.14 (stable), Kubernetes v1.32.1, DigitalOcean, GitHub, YAML/Kustomize/Helm
 **Created:** 2026-05-14
+**Last Deploy:** 2026-05-14 — Production 3CP+3W cluster
 
 ## Principles (จาก Haocomm-AI Oracle)
 
@@ -48,9 +49,10 @@ gitops-argocd/
 ├── infra/                      # Shared infrastructure (Ingress, etc.)
 │   ├── README.md               # Infra docs + access guide
 │   ├── ingress/                # NGINX Ingress rules
-│   │   ├── argocd.yaml         # argocd.local → ArgoCD UI
-│   │   ├── guestbook.yaml      # guestbook.local → Guestbook
-│   │   └── nginx-demo.yaml     # nginx.local → Nginx Demo
+│   │   ├── argocd.yaml         # argocd.ipptt.com → ArgoCD UI
+│   │   ├── guestbook.yaml      # guestbook.ipptt.com → Guestbook
+│   │   ├── nginx-demo.yaml     # nginx.ipptt.com → Nginx Demo
+│   │   └── grafana.yaml        # grafana.ipptt.com → Grafana
 │   ├── monitoring/             # Prometheus + Grafana stack
 │   └── quotas/                 # ResourceQuota enforcement
 └── argocd/                     # App of Apps (root)
@@ -61,14 +63,16 @@ gitops-argocd/
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| ArgoCD version | v2.14 | Stable on k8s 1.30, tested |
-| Install mode | Core (non-HA) | Phase 1 — single cluster, no HA needed |
-| Secret management | SealedSecrets ✅ | GitOps-native secrets via kubeseal; Phase 2b complete |
-| Sync policy | Auto (prune + selfHeal) ✅ | Automated sync enabled on all apps; Phase 2b complete |
-| Source control | GitLab | User requirement |
+| ArgoCD version | v2.14 (stable) | Stable on k8s 1.32.1, tested |
+| Install mode | Core (non-HA) | Pinned to controlplan-0 via nodeSelector (DNS workaround) |
+| Cluster | 3 CP + 3 Worker | DigitalOcean, HA Proxy, Calico VXLAN |
+| Secret management | SealedSecrets ✅ | GitOps-native secrets via kubeseal |
+| Sync policy | Auto (prune + selfHeal) ✅ | Automated sync enabled on all apps |
+| Source control | GitHub (public) | https://github.com/Wsangsrichan/gitops-argocd.git |
 | Demo apps | Guestbook (Helm) + Nginx (Kustomize) | Show both Helm and Kustomize patterns |
-| Dashboard access | Ingress (argocd.local) ✅ | Dev access via local DNS — no port-forward needed; Phase 3 complete |
-| Monitoring | Prometheus + Grafana ✅ | Prometheus scraping ArgoCD metrics; Grafana dashboard 14584; Phase 3 complete |
+| DNS Workaround | CoreDNS=1 on CP0, ArgoCD → CP0 | Inter-node port 53 blocked |
+| Ingress | *.ipptt.com via NGINX | 4 services: argocd, guestbook, nginx, grafana |
+| Monitoring | Prometheus + Grafana ✅ | Deployed via Helm, grafana.ipptt.com |
 
 ## Quick Reference
 
@@ -93,23 +97,29 @@ argocd app get <app-name>
 - Secret type: `argocd.argoproj.io/secret-type: repo-creds`
 
 ## Verification Checklist
-- [x] ArgoCD pods running in `argocd` namespace
-- [x] Dashboard accessible via https://argocd.local
-- [x] GitHub repo connected (status: Successful in Repositories)
-- [x] AppProject created (no errors)
-- [x] Applications sync (Auto-Prune)
-- [x] Guestbook accessible via https://guestbook.local
-- [x] NGINX Ingress working
+- [x] ArgoCD pods running in `argocd` namespace (all on controlplan-0)
+- [x] Dashboard accessible via https://argocd.ipptt.com
+- [x] GitHub repo connected
+- [x] AppProject `demo-project` created
+- [x] Applications synced (Auto-Prune): root-app, guestbook, nginx-demo
+- [x] Guestbook accessible via https://guestbook.ipptt.com
+- [x] Nginx-Demo accessible via https://nginx.ipptt.com
+- [x] NGINX Ingress working (4 hosts)
 - [x] SealedSecrets controller running
-- [x] Prometheus scraping ArgoCD metrics
-- [x] Grafana dashboard imported (ID 14584)
-- [x] ResourceQuotas enforced
+- [x] Prometheus + Grafana deployed (https://grafana.ipptt.com)
+- [x] ResourceQuotas enforced (guestbook, nginx-demo)
+- [ ] DNS records for *.ipptt.com — user to configure
 
 ## Phase Summary
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| Phase 1 | Bootstrap — ArgoCD core install, namespace, root app | ✅ Complete |
+| Phase 1 | Bootstrap — ArgoCD install, namespace, root app | ✅ Complete |
 | Phase 2 | AppProjects + Applications (Guestbook, Nginx Demo) | ✅ Complete |
-| Phase 2b | SealedSecrets, Auto-Sync, GitHub PAT | ✅ Complete |
-| Phase 3 | Ingress (argocd.local, guestbook.local), Monitoring (Prometheus + Grafana), ResourceQuotas | ✅ Complete |
+| Phase 2b | SealedSecrets, Auto-Sync | ✅ Complete |
+| Phase 3 | Ingress (*.ipptt.com), Monitoring (Prometheus+Grafana), ResourceQuotas | ✅ Complete |
+| Phase 4 | Production Deploy — 6-node DO cluster, DNS workaround | ✅ Complete |
+
+## Known Issues
+- **Inter-node DNS blocked**: Port 53 (UDP/TCP) blocked between nodes. Workaround: CoreDNS scaled to 1 on controlplan-0, ArgoCD pinned to same node via nodeSelector.
+- **Future fix**: Remove nodeSelector and scale CoreDNS back to 2 once firewall port 53 is opened between nodes.
