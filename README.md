@@ -338,4 +338,3 @@ Phase 1 uses **manual sync** for safety. No automated sync or prune.
 ## License
 
 Internal use — Haocomm
-# test auto-sync
